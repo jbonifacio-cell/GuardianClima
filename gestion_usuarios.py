@@ -1,160 +1,80 @@
 """
-gestion_usuarios.py - Gestión Simulada de Usuarios
-Maneja registro, login y almacenamiento de usuarios en CSV.
-
-Desarrollado por: Grupo 56 - ITBA 2026
+estadisticas.py - Estadísticas Globales de Uso, procesa el historial global para generar estadísticas
+y exportar datos para gráficos en Excel/Google Sheets.
 """
 
 import csv
 import os
-from config import ARCHIVO_USUARIOS
-from validacion_password import validar_password, mostrar_feedback_password
+from collections import Counter
+from config import ARCHIVO_HISTORIAL
 
 
-def inicializar_archivo_usuarios():
-    """Crea el archivo CSV de usuarios si no existe."""
-    if not os.path.exists(ARCHIVO_USUARIOS):
-        with open(ARCHIVO_USUARIOS, mode='w', newline='', encoding='utf-8') as f:
-            writer = csv.writer(f)
-            writer.writerow(["username", "password_simulada"])
-
-
-def cargar_usuarios():
+def calcular_estadisticas_globales():
     """
-    Carga todos los usuarios desde el CSV.
-    
-    Retorna:
-    - dict {username: password_simulada}
+    Opción 3 del menú principal.
+    Calcula y muestra estadísticas sobre todas las consultas de todos los usuarios.
     """
-    inicializar_archivo_usuarios()
-    usuarios = {}
+
+    print("ESTADÍSTICAS GLOBALES DE USO")
+
+    if not os.path.exists(ARCHIVO_HISTORIAL):
+        print("No hay datos en el historial global aún.")
+        print(" Realizá algunas consultas de clima primero (Opción 1).")
+        return
+
     try:
-        with open(ARCHIVO_USUARIOS, mode='r', newline='', encoding='utf-8') as f:
+        with open(ARCHIVO_HISTORIAL, mode='r', newline='', encoding='utf-8') as f:
             reader = csv.DictReader(f)
-            for fila in reader:
-                usuarios[fila["username"]] = fila["password_simulada"]
+            registros = list(reader)
     except FileNotFoundError:
-        pass
-    return usuarios
+        print("No se encontró el archivo de historial.")
+        return
 
+    if not registros:
+        print("El historial está vacío. Realizá consultas primero.")
+        return
 
-def guardar_usuario(username, password):
-    """
-    Agrega un nuevo usuario al archivo CSV de usuarios.
-    
-    Parámetros:
-    - username: nombre de usuario a registrar
-    - password: contraseña (ya validada)
-    """
-    inicializar_archivo_usuarios()
-    with open(ARCHIVO_USUARIOS, mode='a', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-        writer.writerow([username, password])
+    # 1: Total de consultas
+    total_consultas = len(registros)
 
+    # 2: Ciudad más consultada
+    ciudades = [r["Ciudad"] for r in registros]
+    conteo_ciudades = Counter(ciudades)
+    ciudad_top = conteo_ciudades.most_common(1)[0]
 
-def registrar_usuario():
-    """
-    Proceso completo de registro de un nuevo usuario.
-    
-    Flujo:
-    1. Solicita nombre de usuario (validar que no exista)
-    2. Solicita contraseña (con validación de requisitos)
-    3. Solicita confirmación de contraseña
-    4. Guarda el usuario en CSV
-    
-    Retorna:
-    - username si el registro fue exitoso
-    - None si el usuario canceló
-    """
+    # 3: Temperatura promedio global
+    temperaturas = []
+    for r in registros:
+        try:
+            temperaturas.append(float(r["Temperatura_C"]))
+        except (ValueError, KeyError):
+            pass
 
-    print("REGISTRO DE NUEVO USUARIO")
+    temp_promedio = round(sum(temperaturas) / len(temperaturas), 1) if temperaturas else 0
 
-    # ===== PASO 1: Obtener nombre de usuario =====
-    while True:
-        username = input("\nIngresá tu nombre de usuario (o 'cancelar' para volver): ").strip()
+    # Mostrar resultados
+    print(f"\n  Total de consultas realizadas:  {total_consultas}")
+    print(f"  Ciudad más consultada:          {ciudad_top[0]} ({ciudad_top[1]} consultas)")
+    print(f"  Temperatura promedio global:    {temp_promedio}°C")
 
-        if username.lower() == 'cancelar':
-            return None
+    # Ranking de ciudades
+    print(f"\n  Ranking de ciudades consultadas:")
+    print("  " + "-" * 35)
+    for i, (ciudad, count) in enumerate(conteo_ciudades.most_common(), 1):
+        barra = "█" * count
+        print(f"  {i:2}. {ciudad:<20} {count:3} consulta(s) {barra}")
 
-        if not username:
-            print("El nombre de usuario no puede estar vacío.")
-            continue
+    # Distribución de condiciones climáticas
+    condiciones = [r["Condicion_Clima"] for r in registros]
+    conteo_condiciones = Counter(condiciones)
+    print(f"\n  Distribución de condiciones climáticas:")
+    print("  " + "-" * 45)
+    for condicion, count in conteo_condiciones.most_common():
+        porcentaje = round((count / total_consultas) * 100, 1)
+        print(f"  • {condicion:<30} {porcentaje:5.1f}%")
 
-        # Verificar si el usuario ya existe
-        usuarios = cargar_usuarios()
-        if username in usuarios:
-            print(f"El usuario '{username}' ya existe. Elegí otro nombre.")
-            continue
-
-        break
-
-    # ===== PASO 2: Validar y obtener contraseña =====
-    while True:
-        print(f"\nUsuario '{username}' disponible ")
-        print("\n Requisitos de contraseña:")
-        print("   • Mínimo 8 caracteres")
-        print("   • Al menos una MAYÚSCULA")
-        print("   • Al menos una minúscula")
-        print("   • Al menos un número")
-        print("   • Al menos un carácter especial (!@#$%^&*...)")
-
-        password = input("\nIngresá tu contraseña: ").strip()
-
-        if not password:
-            print("La contraseña no puede estar vacía.")
-            continue
-
-        # Validar la contraseña contra todos los requisitos
-        es_valida, reglas_incumplidas = validar_password(password)
-
-        if not es_valida:
-            # Si la contraseña no cumple, mostrar feedback
-            mostrar_feedback_password(reglas_incumplidas)
-            opcion = input("\n¿Querés intentar con otra contraseña? (s/n): ").strip().lower()
-            if opcion != 's':
-                return None
-            continue
-
-        # ===== PASO 3: Confirmar contraseña =====
-        confirmacion = input("Confirmá tu contraseña: ").strip()
-        if password != confirmacion:
-            print("Las contraseñas no coinciden. Intentá de nuevo.")
-            continue
-
-        # ===== PASO 4: Guardar usuario =====
-        guardar_usuario(username, password)
-        print(f"\n ¡Usuario '{username}' registrado exitosamente!")
-        return username
-
-
-def iniciar_sesion():
-    """
-    Proceso de inicio de sesión.
-    Permite 3 intentos antes de rechazar el acceso.
-    
-    Retorna:
-    - username si el login fue exitoso
-    - None si falló después de 3 intentos
-    """
-
-    print("INICIAR SESIÓN")
-
-    intentos = 3
-    while intentos > 0:
-        username = input("\nNombre de usuario: ").strip()
-        password = input("Contraseña: ").strip()
-
-        usuarios = cargar_usuarios()
-
-        # Verificar credenciales
-        if username in usuarios and usuarios[username] == password:
-            print(f"\n ¡Bienvenido, {username}!")
-            return username
-        else:
-            intentos -= 1
-            if intentos > 0:
-                print(f"Credenciales incorrectas. Te quedan {intentos} intento(s).")
-            else:
-                print("Demasiados intentos fallidos. Volviendo al menú de acceso.")
-
-    return None
+    print("  El archivo historial_global.csv está disponible")
+    print("     para crear gráficos en Excel o Google Sheets:")
+    print("  • Barras:  Consultas por ciudad")
+    print("  • Líneas:  Temperatura de una ciudad en el tiempo")
+    print("  • Torta:   Distribución de condiciones climáticas")
